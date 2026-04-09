@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>登录 · 文档盖章系统</title>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    body{font-family:-apple-system,"PingFang SC","Microsoft YaHei",sans-serif;
+         background:linear-gradient(135deg,#1d3557 0%,#457b9d 100%);
+         min-height:100vh;display:flex;align-items:center;justify-content:center;}
+    .box{background:#fff;border-radius:16px;box-shadow:0 10px 40px rgba(0,0,0,.25);
+         padding:2.8rem 2.4rem;width:380px;}
+    .logo{text-align:center;margin-bottom:1.8rem;}
+    .logo .icon{font-size:2.5rem;}
+    .logo h1{font-size:1.3rem;color:#1d3557;margin-top:.4rem;}
+    .logo p{font-size:.82rem;color:#6c757d;margin-top:.2rem;}
+    .group{margin-bottom:1.1rem;}
+    label{display:block;font-size:.83rem;color:#495057;margin-bottom:.35rem;}
+    input{width:100%;padding:.62rem .88rem;border:1.5px solid #dee2e6;border-radius:7px;
+          font-size:.95rem;outline:none;transition:border-color .2s;}
+    input:focus{border-color:#457b9d;}
+    .btn{width:100%;padding:.75rem;background:#1d3557;color:#fff;border:none;
+         border-radius:7px;font-size:1rem;font-weight:700;cursor:pointer;
+         margin-top:.6rem;transition:background .2s;}
+    .btn:hover{background:#457b9d;}
+    .error{background:#f8d7da;color:#721c24;border-radius:7px;padding:.65rem .9rem;
+           font-size:.86rem;margin-bottom:1rem;}
+    .demo-hint{margin-top:1.4rem;background:#f8f9fa;border-radius:8px;padding:.9rem 1rem;
+               font-size:.78rem;color:#6c757d;line-height:1.8;}
+    .demo-hint b{color:#495057;}
+  </style>
+</head>
+<body>
+<div class="box">
+  <div class="logo">
+    <div class="icon">📋</div>
+    <h1>文档盖章机器人</h1>
+    <p>DEMO 演示版本</p>
+  </div>
+  {% if error %}<div class="error">{{ error }}</div>{% endif %}
+  <form method="POST">
+    <div class="group">
+      <label>用户名</label>
+      <input type="text" name="username" placeholder="输入用户名" autofocus required>
+    </div>
+    <div class="group">
+      <label>密码</label>
+      <input type="password" name="password" placeholder="输入密码" required>
+    </div>
+    <button type="submit" class="btn">登 录</button>
+  </form>
+  <div class="demo-hint">
+    <b>演示账号：</b><br>
+    管理员 &nbsp;：admin / admin123<br>
+    操作员 &nbsp;：operator1 / op123<br>
+    复审员 &nbsp;：reviewer1 / reviewer123
+  </div>
+</div>
+</body>
+</html>

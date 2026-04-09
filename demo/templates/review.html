@@ -1,0 +1,142 @@
+{% extends "base.html" %}
+{% block title %}人工复审 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .review-card {
+    border:1.5px solid #dee2e6; border-radius:10px;
+    padding:1.2rem 1.4rem; margin-bottom:1rem;
+    transition:box-shadow .2s;
+  }
+  .review-card:hover { box-shadow:0 4px 16px rgba(0,0,0,.09); }
+  .review-card.pending  { border-left:5px solid #ffc107; }
+  .review-card.approved { border-left:5px solid #28a745; }
+  .review-card.rejected { border-left:5px solid #dc3545; }
+  .r-meta { font-size:.8rem; color:#6c757d; margin-bottom:.55rem; }
+  .r-warn {
+    font-size:.84rem; color:#856404;
+    background:#fff3cd; border-radius:5px;
+    padding:.45rem .75rem; margin:.5rem 0;
+  }
+  .r-actions { display:flex; gap:.7rem; margin-top:.9rem; align-items:center; }
+  .r-actions .resolved-label { color:#6c757d; font-size:.84rem; }
+  .img-thumb {
+    width:80px; height:80px; object-fit:cover;
+    border-radius:6px; cursor:pointer;
+    border:1px solid #dee2e6; margin-top:.6rem;
+    transition:transform .2s;
+  }
+  .img-thumb:hover { transform:scale(1.08); }
+  .tab-row { display:flex; gap:.5rem; margin-bottom:1.2rem; }
+  .tab { padding:.4rem 1.1rem; border-radius:20px; border:1.5px solid #dee2e6; background:#fff; cursor:pointer; font-size:.85rem; }
+  .tab.active { background:#1d3557; color:#fff; border-color:#1d3557; }
+  .empty { text-align:center; padding:3rem; color:#adb5bd; }
+  .cnt-badge { display:inline-block; background:#ffc107; color:#000; border-radius:10px; padding:1px 8px; font-size:.72rem; margin-left:.3rem; }
+  .overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.75); z-index:999; align-items:center; justify-content:center; }
+  .overlay img { max-width:88vw; max-height:85vh; border-radius:10px; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>人工复审队列</h2>
+  <div class="tab-row">
+    <button class="tab active" onclick="switchTab('pending',this)">
+      待处理 <span class="cnt-badge">{{ pending|length }}</span>
+    </button>
+    <button class="tab" onclick="switchTab('all',this)">全部记录</button>
+  </div>
+
+  <!-- 待处理 -->
+  <div id="tab-pending">
+    {% if pending %}
+      {% for item in pending %}
+      <div class="review-card pending" id="rc-{{ item[0] }}">
+        <div class="r-meta">
+          <b>#{{ item[0] }}</b> &nbsp;·&nbsp; {{ item[1] }}
+          &nbsp;·&nbsp; 操作员：{{ item[2] }}
+          &nbsp;·&nbsp; 类型：{{ {'leave':'请假','expense':'报销','cert':'证明','general':'通用'}.get(item[3],'通用') }}
+        </div>
+        <div style="font-size:.88rem;">{{ item[4] }}</div>
+        {% if item[5] %}
+        <div class="r-warn">⚠️ {{ item[5] }}</div>
+        {% endif %}
+        {% if item[6] %}
+        <img class="img-thumb" src="/images/{{ item[6].split('/')[-1] }}" onclick="showImg(this.src)">
+        {% endif %}
+        <div class="r-actions">
+          <button class="btn btn-success" onclick="resolve({{ item[0] }},'approved')">✓ 批准并盖章</button>
+          <button class="btn btn-danger"  onclick="resolve({{ item[0] }},'rejected')">✗ 拒绝</button>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty">🎉 暂无待处理的复审任务</div>
+    {% endif %}
+  </div>
+
+  <!-- 全部记录 -->
+  <div id="tab-all" style="display:none;">
+    {% for item in all_items %}
+    <div class="review-card {{ item[7] }}">
+      <div class="r-meta">
+        <b>#{{ item[0] }}</b> &nbsp;·&nbsp; {{ item[1] }}
+        &nbsp;·&nbsp; 操作员：{{ item[2] }}
+        &nbsp;·&nbsp; 状态：
+        {% if item[7]=='approved' %}<span class="badge badge-success">已批准</span>
+        {% elif item[7]=='rejected' %}<span class="badge badge-danger">已拒绝</span>
+        {% else %}<span class="badge badge-warning">待处理</span>{% endif %}
+        {% if item[8] %}&nbsp;·&nbsp; 复审员：{{ item[8] }}{% endif %}
+      </div>
+      <div style="font-size:.84rem;color:#495057;">{{ item[4] }}</div>
+    </div>
+    {% else %}
+    <div class="empty">暂无记录</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div class="overlay" id="imgOverlay" onclick="this.style.display='none'">
+  <img id="overlayImg">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(name, btn) {
+  document.getElementById('tab-pending').style.display = name==='pending' ? '' : 'none';
+  document.getElementById('tab-all').style.display    = name==='all'     ? '' : 'none';
+  document.querySelectorAll('.tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+async function resolve(id, decision) {
+  const label = decision==='approved' ? '批准并盖章' : '拒绝';
+  if (!confirm(`确认「${label}」此份文件？`)) return;
+
+  const resp = await fetch(`/review/${id}/resolve`, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({decision})
+  });
+  const data = await resp.json();
+
+  if (data.status === 'ok') {
+    const card = document.getElementById(`rc-${id}`);
+    if (card) {
+      card.classList.remove('pending');
+      card.classList.add(decision);
+      card.querySelector('.r-actions').innerHTML =
+        `<span class="resolved-label">${decision==='approved'?'✅ 已批准盖章':'❌ 已拒绝'}</span>`;
+    }
+  } else {
+    alert('操作失败：' + (data.error||'未知错误'));
+  }
+}
+
+function showImg(src) {
+  document.getElementById('overlayImg').src = src;
+  document.getElementById('imgOverlay').style.display = 'flex';
+}
+</script>
+{% endblock %}

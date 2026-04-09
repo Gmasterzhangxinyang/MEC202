@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{% block title %}文档盖章系统{% endblock %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: #f0f2f5;
+      color: #1a1a1a;
+      min-height: 100vh;
+    }
+    /* ── 顶部导航 ── */
+    nav {
+      background: #1d3557;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 2rem;
+      height: 56px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.3);
+    }
+    nav .brand { font-size: 1.1rem; font-weight: 700; letter-spacing: .5px; }
+    nav .nav-links a {
+      color: #a8dadc;
+      text-decoration: none;
+      margin-left: 1.5rem;
+      font-size: .9rem;
+      transition: color .2s;
+    }
+    nav .nav-links a:hover { color: #fff; }
+    nav .user-info { font-size: .85rem; color: #a8dadc; }
+    /* ── 容器 ── */
+    .container { max-width: 960px; margin: 2rem auto; padding: 0 1rem; }
+    /* ── 卡片 ── */
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 2px 12px rgba(0,0,0,.08);
+      padding: 2rem;
+      margin-bottom: 1.5rem;
+    }
+    .card h2 { font-size: 1.1rem; margin-bottom: 1rem; color: #1d3557; }
+    /* ── 按钮 ── */
+    .btn {
+      display: inline-block;
+      padding: .65rem 1.6rem;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: .95rem;
+      font-weight: 600;
+      transition: opacity .15s, transform .1s;
+    }
+    .btn:hover { opacity: .88; transform: translateY(-1px); }
+    .btn:active { transform: translateY(0); }
+    .btn-primary   { background: #457b9d; color: #fff; }
+    .btn-success   { background: #2a9d8f; color: #fff; }
+    .btn-danger    { background: #e63946; color: #fff; }
+    .btn-secondary { background: #adb5bd; color: #fff; }
+    /* ── 标签 ── */
+    .badge {
+      display: inline-block;
+      padding: .25rem .6rem;
+      border-radius: 4px;
+      font-size: .78rem;
+      font-weight: 700;
+    }
+    .badge-success  { background: #d4edda; color: #155724; }
+    .badge-danger   { background: #f8d7da; color: #721c24; }
+    .badge-warning  { background: #fff3cd; color: #856404; }
+    .badge-info     { background: #d1ecf1; color: #0c5460; }
+    /* ── 表格 ── */
+    table { width: 100%; border-collapse: collapse; font-size: .88rem; }
+    th { background: #f8f9fa; padding: .65rem .8rem; text-align: left; border-bottom: 2px solid #dee2e6; }
+    td { padding: .6rem .8rem; border-bottom: 1px solid #f0f0f0; }
+    tr:hover td { background: #f8f9fa; }
+    /* ── 响应式 ── */
+    @media(max-width: 600px) {
+      nav { padding: 0 1rem; }
+      .container { padding: 0 .5rem; }
+      .card { padding: 1.2rem; }
+    }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+{% if session.get('username') %}
+<nav>
+  <span class="brand">文档盖章机器人</span>
+  <div class="nav-links">
+    <a href="/">操作台</a>
+    <a href="/logs">审计日志</a>
+    {% if session.get('role') in ('reviewer','admin') %}
+    <a href="/review">人工复审</a>
+    {% endif %}
+    <a href="/logout">退出</a>
+  </div>
+  <span class="user-info">{{ session.get('username') }} · {{ session.get('role') }}</span>
+</nav>
+{% endif %}
+<div class="container">
+  {% block content %}{% endblock %}
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>
