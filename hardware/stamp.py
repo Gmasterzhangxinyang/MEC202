@@ -4,21 +4,31 @@ from config import SERIAL_PORT, SERIAL_BAUD, SIMULATION_MODE
 
 logger = logging.getLogger(__name__)
 
+# WeArm 舵机 ID（对应控制手册引脚映射）
+_SHOULDER = 1   # 肩部（大臂）—— 负责下压盖章
+_WRIST    = 3   # 腕部 —— 微调盖章角度
+
+# PWM 值
+_SHOULDER_UP   = 1500   # 抬起（中位）
+_SHOULDER_DOWN = 2000   # 下压盖章
+_WRIST_STAMP   = 1300   # 盖章时腕部角度
+_WRIST_NEUTRAL = 1500   # 腕部中位
+
+_STAMP_TIME = 1200      # 下压运动时间 ms
+_HOLD_TIME  = 0.9       # 下压停留时间 s
+_LIFT_TIME  = 1000      # 抬起运动时间 ms
+
+
+def _cmd(servo_id: int, pwm: int, duration: int) -> bytes:
+    return f'#{servo_id:03d}P{pwm:04d}T{duration:04d}!'.encode()
+
+
+def _cmd_multi(*cmds) -> bytes:
+    body = ''.join(f'#{i:03d}P{p:04d}T{t:04d}!' for i, p, t in cmds)
+    return f'{{{body}}}'.encode()
+
 
 class StampController:
-    """
-    控制 Arduino 完成盖章全序列：
-      解锁印章盒 → 慢速下压（力度控制）→ 停留 → 慢速抬起 → 锁定印章盒
-
-    SIMULATION_MODE=True 时不实际操作串口（开发阶段使用）。
-    """
-
-    # Arduino 串口命令（与 arduino/stamp_controller.ino 对应）
-    CMD_STAMP  = b'S'   # 执行盖章
-    CMD_LOCK   = b'L'   # 锁定印章盒
-    CMD_UNLOCK = b'U'   # 解锁印章盒
-    CMD_PING   = b'P'   # 心跳检测
-
     def __init__(self):
         self._ser = None
         if not SIMULATION_MODE:
@@ -30,64 +40,65 @@ class StampController:
         import serial
         try:
             self._ser = serial.Serial(SERIAL_PORT, SERIAL_BAUD, timeout=3)
-            time.sleep(2)   # 等 Arduino 复位完成
-            self._lock()    # 启动时确保印章处于锁定状态
-            logger.info(f'Arduino 已连接：{SERIAL_PORT}')
+            time.sleep(2)
+            # 初始化：肩部和腕部回中位
+            self._ser.write(_cmd_multi(
+                (_SHOULDER, _SHOULDER_UP, 1000),
+                (_WRIST, _WRIST_NEUTRAL, 1000),
+            ))
+            time.sleep(1.2)
+            logger.info(f'WeArm 已连接：{SERIAL_PORT}')
         except Exception as e:
             raise RuntimeError(
-                f'无法连接 Arduino（{SERIAL_PORT}）：{e}\n'
-                '请检查：1) USB线是否插好  2) config.py 中 SERIAL_PORT 是否正确  '
-                '3) 是否已上传 Arduino 固件'
+                f'无法连接 WeArm（{SERIAL_PORT}）：{e}\n'
+                '请检查：1) USB线是否插好  2) 电源开关是否打开  '
+                '3) CH340驱动是否安装'
             )
 
-    def _send(self, cmd: bytes):
+    def _send(self, data: bytes):
         if SIMULATION_MODE:
-            logger.info(f'[仿真] 发送命令: {cmd}')
+            logger.info(f'[仿真] 发送: {data}')
             return
         if self._ser and self._ser.is_open:
-            self._ser.write(cmd)
-
-    def _lock(self):
-        self._send(self.CMD_LOCK)
-        time.sleep(0.3)
-
-    def _unlock(self):
-        self._send(self.CMD_UNLOCK)
-        time.sleep(0.5)   # 给锁定舵机时间到位
+            self._ser.write(data)
 
     def stamp(self):
-        """
-        完整盖章序列（约3秒）：
-        1. 解锁印章盒
-        2. 发送盖章指令（Arduino 端做慢速力度控制）
-        3. 等待盖章完成
-        4. 重新锁定印章盒
-        """
         logger.info('开始盖章序列')
         try:
-            self._unlock()
-            self._send(self.CMD_STAMP)
-            time.sleep(3.0)   # 等 Arduino 完成慢速下压+停留+抬起
-            self._lock()
-            logger.info('盖章序列完成，印章已锁定')
+            # 腕部调整 + 肩部下压（同时运动）
+            self._send(_cmd_multi(
+                (_SHOULDER, _SHOULDER_DOWN, _STAMP_TIME),
+                (_WRIST, _WRIST_STAMP, _STAMP_TIME),
+            ))
+            time.sleep(_STAMP_TIME / 1000 + _HOLD_TIME)
+
+            # 抬起复位
+            self._send(_cmd_multi(
+                (_SHOULDER, _SHOULDER_UP, _LIFT_TIME),
+                (_WRIST, _WRIST_NEUTRAL, _LIFT_TIME),
+            ))
+            time.sleep(_LIFT_TIME / 1000 + 0.2)
+            logger.info('盖章序列完成')
         except Exception as e:
-            self._lock()      # 异常时也要锁定
+            # 异常时强制抬起
+            self._send(_cmd(_SHOULDER, _SHOULDER_UP, 800))
             raise RuntimeError(f'盖章过程出错：{e}')
 
     def ping(self) -> bool:
-        """检测 Arduino 是否在线"""
         if SIMULATION_MODE:
             return True
         try:
-            self._send(self.CMD_PING)
-            resp = self._ser.readline().decode().strip()
-            return resp == 'PONG'
+            return self._ser is not None and self._ser.is_open
         except Exception:
             return False
 
     def close(self):
         if self._ser and self._ser.is_open:
-            self._lock()
+            self._send(_cmd_multi(
+                (_SHOULDER, _SHOULDER_UP, 800),
+                (_WRIST, _WRIST_NEUTRAL, 800),
+            ))
+            time.sleep(1)
             self._ser.close()
 
     def __del__(self):

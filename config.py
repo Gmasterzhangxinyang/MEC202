@@ -1,10 +1,8 @@
 import os
 
 # ─── 串口配置 ─────────────────────────────────────────────────────────────────
-# Windows 示例: 'COM3'   Mac/Linux 示例: '/dev/tty.usbmodem14101'
-# 用 Arduino IDE 菜单 → 工具 → 端口 查看
-SERIAL_PORT = 'COM3'
-SERIAL_BAUD = 9600
+SERIAL_PORT = '/dev/cu.wchusbserial10'
+SERIAL_BAUD = 115200
 
 # ─── 摄像头 ──────────────────────────────────────────────────────────────────
 # 0 = 系统默认摄像头（笔记本内置或第一个USB摄像头）
@@ -18,7 +16,7 @@ AUDIT_IMAGE_DIR = os.path.join(BASE_DIR, 'audit_images')
 # ─── Web ─────────────────────────────────────────────────────────────────────
 SECRET_KEY = 'stamp_robot_mec202_secret'
 WEB_HOST   = '0.0.0.0'
-WEB_PORT   = 5000
+WEB_PORT   = 5001
 
 # ─── 文档规则 ─────────────────────────────────────────────────────────────────
 # 不同文件类型需要的必填字段
@@ -38,5 +36,4 @@ DMS_BASE_URL = ''
 DMS_API_KEY  = ''
 
 # ─── 硬件仿真模式 ─────────────────────────────────────────────────────────────
-# 开发阶段没有硬件时设为 True，盖章动作只打印日志不操作串口
-SIMULATION_MODE = True
+SIMULATION_MODE = False

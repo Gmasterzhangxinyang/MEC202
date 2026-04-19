@@ -5,32 +5,58 @@
 <style>
   .stamp-panel {
     text-align: center;
-    padding: 2.5rem 1rem;
+    padding: 2rem 1rem;
   }
+
+  /* 摄像头预览 */
+  .preview-wrap {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 1.2rem;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  }
+  .preview-wrap img {
+    display: block;
+    width: 480px;
+    max-width: 100%;
+    height: auto;
+  }
+  .paper-badge {
+    position: absolute;
+    top: 10px; left: 10px;
+    padding: .3rem .8rem;
+    border-radius: 20px;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #fff;
+    background: #dc3545;
+    transition: background .3s;
+    pointer-events: none;
+  }
+  .paper-badge.detected { background: #28a745; }
+
   .stamp-btn {
-    width: 180px;
-    height: 180px;
+    width: 160px; height: 160px;
     border-radius: 50%;
     background: linear-gradient(145deg, #457b9d, #1d3557);
     border: none;
     color: #fff;
-    font-size: 1.15rem;
+    font-size: 1.1rem;
     font-weight: 700;
     cursor: pointer;
     box-shadow: 0 6px 20px rgba(29,53,87,.4);
     transition: transform .15s, box-shadow .15s;
     line-height: 1.4;
   }
-  .stamp-btn:hover:not(:disabled) {
-    transform: scale(1.05);
-    box-shadow: 0 10px 28px rgba(29,53,87,.5);
-  }
+  .stamp-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 10px 28px rgba(29,53,87,.5); }
   .stamp-btn:active:not(:disabled) { transform: scale(.97); }
   .stamp-btn:disabled { background: #adb5bd; cursor: not-allowed; box-shadow: none; }
 
   .status-box {
-    margin-top: 2rem;
-    min-height: 80px;
+    margin-top: 1.5rem;
+    min-height: 70px;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -46,11 +72,9 @@
   @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
   .result-card.approved { background: #d4edda; border-left: 5px solid #28a745; }
   .result-card.rejected { background: #f8d7da; border-left: 5px solid #dc3545; }
-  .result-card.review   { background: #fff3cd; border-left: 5px solid #ffc107; }
   .result-card.error    { background: #f8d7da; border-left: 5px solid #6c757d; }
   .result-card h3 { font-size: 1rem; margin-bottom: .5rem; }
   .result-card ul { padding-left: 1.2rem; font-size: .88rem; margin-top: .4rem; }
-  .result-card .fields { font-size: .82rem; color: #495057; margin-top: .5rem; }
 
   .spinner {
     display: inline-block;
@@ -61,58 +85,49 @@
     animation: spin .8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-
-  .step-guide {
-    display: flex;
-    justify-content: center;
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-    flex-wrap: wrap;
-  }
-  .step {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: .4rem;
-    font-size: .8rem;
-    color: #6c757d;
-  }
-  .step-num {
-    width: 32px; height: 32px;
-    background: #e9ecef;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    font-weight: 700;
-    color: #495057;
-  }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="card">
-  <h2>操作说明</h2>
-  <div class="step-guide">
-    <div class="step"><div class="step-num">1</div><span>登录账号</span></div>
-    <div class="step"><div class="step-num">2</div><span>放入文件至对齐槽</span></div>
-    <div class="step"><div class="step-num">3</div><span>点击扫描按钮</span></div>
-    <div class="step"><div class="step-num">4</div><span>等待验证结果</span></div>
-    <div class="step"><div class="step-num">5</div><span>取走文件</span></div>
-  </div>
-</div>
-
 <div class="card stamp-panel">
+
+  <!-- 摄像头实时预览 -->
+  <div class="preview-wrap">
+    <img src="/video_feed" alt="摄像头预览">
+    <div class="paper-badge" id="paperBadge">未检测到纸张</div>
+  </div>
+
+  <br>
   <button class="stamp-btn" id="stampBtn" onclick="triggerStamp()">
-    扫描<br>&amp;<br>审核
+    扫描<br>&amp;<br>盖章
   </button>
 
   <div class="status-box" id="statusBox">
-    <span style="color:#adb5bd;font-size:.9rem;">点击按钮开始</span>
+    <span style="color:#adb5bd;font-size:.9rem;">将文件放入摄像头视野后点击按钮</span>
   </div>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+// 每秒轮询纸张检测状态，更新徽章
+async function pollPaper() {
+  try {
+    const r = await fetch('/paper_status');
+    const d = await r.json();
+    const badge = document.getElementById('paperBadge');
+    if (d.has_paper) {
+      badge.textContent = '已检测到纸张';
+      badge.classList.add('detected');
+    } else {
+      badge.textContent = '未检测到纸张';
+      badge.classList.remove('detected');
+    }
+  } catch(e) {}
+}
+setInterval(pollPaper, 1000);
+pollPaper();
+
 async function triggerStamp() {
   const btn = document.getElementById('stampBtn');
   const box = document.getElementById('statusBox');
@@ -125,45 +140,29 @@ async function triggerStamp() {
     const data = await resp.json();
     renderResult(data, box);
   } catch(e) {
-    box.innerHTML = resultHtml('error', '网络错误', [e.message], {});
+    box.innerHTML = resultHtml('error', [e.message]);
   } finally {
     btn.disabled = false;
   }
 }
 
 function renderResult(data, box) {
-  const { status, fields = {}, errors = [], warnings = [], message } = data;
+  const { status, errors = [], message } = data;
   let cls, title, msgs;
 
   if (status === 'approved') {
-    cls = 'approved'; title = '审核通过 · 已盖章';
-    msgs = [];
+    cls = 'approved'; title = '盖章完成'; msgs = [];
   } else if (status === 'rejected') {
-    cls = 'rejected'; title = '审核拒绝';
-    msgs = errors;
-  } else if (status === 'pending_review') {
-    cls = 'review'; title = '已推入人工复审队列';
-    msgs = warnings;
+    cls = 'rejected'; title = '未盖章'; msgs = errors;
   } else {
-    cls = 'error'; title = '系统错误';
-    msgs = [message || '未知错误'];
+    cls = 'error'; title = '系统错误'; msgs = [message || '未知错误'];
   }
 
   const errHtml = msgs.length
     ? '<ul>' + msgs.map(m => `<li>${m}</li>`).join('') + '</ul>'
     : '';
 
-  const fKeys = Object.entries(fields)
-    .filter(([,v]) => v)
-    .map(([k,v]) => `<b>${k}</b>：${v}`)
-    .join(' &nbsp;|&nbsp; ');
-
-  box.innerHTML = `
-    <div class="result-card ${cls}">
-      <h3>${title}</h3>
-      ${errHtml}
-      ${fKeys ? `<div class="fields">${fKeys}</div>` : ''}
-    </div>`;
+  box.innerHTML = `<div class="result-card ${cls}"><h3>${title}</h3>${errHtml}</div>`;
 }
 </script>
 {% endblock %}

@@ -3,7 +3,7 @@ from functools import wraps
 
 from flask import (
     Flask, render_template, request, session,
-    redirect, url_for, jsonify, send_from_directory
+    redirect, url_for, jsonify, send_from_directory, Response
 )
 from werkzeug.security import check_password_hash
 
@@ -186,7 +186,52 @@ def resolve_review(review_id):
     return jsonify({'status': 'ok'})
 
 
-# ─── 图片访问 ─────────────────────────────────────────────────────────────────
+# ─── 摄像头预览 ───────────────────────────────────────────────────────────────
+
+def _gen_frames():
+    import cv2
+    import numpy as np
+    from config import CAMERA_INDEX
+    cap = cv2.VideoCapture(CAMERA_INDEX)
+    try:
+        while True:
+            ret, frame = cap.read()
+            if not ret:
+                break
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            has_paper = (np.sum(gray > 180) / gray.size) > 0.3
+            color = (40, 200, 40) if has_paper else (60, 60, 200)
+            label = '已检测到纸张' if has_paper else '未检测到纸张'
+            cv2.rectangle(frame, (8, 8), (220, 42), (0, 0, 0), -1)
+            cv2.putText(frame, label, (14, 32), cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2)
+            _, buf = cv2.imencode('.jpg', frame)
+            yield (b'--frame\r\nContent-Type: image/jpeg\r\n\r\n' + buf.tobytes() + b'\r\n')
+    finally:
+        cap.release()
+
+
+@app.route('/video_feed')
+@login_required
+def video_feed():
+    return Response(_gen_frames(), mimetype='multipart/x-mixed-replace; boundary=frame')
+
+
+@app.route('/paper_status')
+@login_required
+def paper_status():
+    import cv2, numpy as np
+    from config import CAMERA_INDEX
+    cap = cv2.VideoCapture(CAMERA_INDEX)
+    ret, frame = cap.read()
+    cap.release()
+    if not ret:
+        return jsonify({'has_paper': False})
+    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    has_paper = bool((np.sum(gray > 180) / gray.size) > 0.3)
+    return jsonify({'has_paper': has_paper})
+
+
+
 
 @app.route('/images/<path:filename>')
 @login_required
