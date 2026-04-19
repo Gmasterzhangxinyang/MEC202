@@ -150,7 +150,30 @@ OCR识别       ID对库验证     印章锁控制
 
 ---
 
-## 5. 硬件说明
+## 5. 硬件说明（WeArm 机械臂）
+
+### WeArm 机械臂（当前硬件）
+
+| 项目 | 参数 |
+|------|------|
+| 型号 | WeArm（Arduino 控制） |
+| 串口 | `/dev/cu.wchusbserial10` |
+| 波特率 | 115200 |
+| 驱动 | CH340（CH34xVCPDriver） |
+| 电源 | 7.5V 3A，控制板开关需打开 |
+
+**盖章使用关节：**
+
+| 舵机ID | 关节 | 作用 |
+|--------|------|------|
+| 1 | 肩部（大臂） | 下压盖章 |
+| 3 | 腕部 | 调整盖章角度 |
+
+**指令格式：** `#IDPpwmTtime!`，多舵机同时运动用 `{}` 包裹。
+
+---
+
+### 原硬件说明（已替换）
 
 ### 设备清单
 
@@ -256,38 +279,41 @@ python run_demo.py
 
 ## 8. 正式运行（接硬件）
 
-### 步骤一：上传 Arduino 固件
+### 步骤一：连接 WeArm 机械臂
 
-1. 安装 [Arduino IDE](https://www.arduino.cc/en/software)
-2. 打开 `arduino/stamp_controller.ino`
-3. 菜单 → 工具 → 端口，记录端口号（如 `COM3` 或 `/dev/tty.usbmodem14101`）
-4. 点击上传（→ 按钮）
+1. USB 连接电脑，打开机械臂电源开关
+2. 确认串口设备存在：
+   ```bash
+   ls /dev/cu.wchusbserial*
+   ```
+3. 安装 CH340 驱动（如未安装）：搜索 `CH34xVCPDriver` 下载安装
 
-### 步骤二：修改配置
+### 步骤二：确认配置
 
-编辑 `config.py`：
+`config.py` 已预设好，无需修改：
 
 ```python
-SERIAL_PORT     = 'COM3'      # 改为你的 Arduino 端口
-CAMERA_INDEX    = 0           # 摄像头编号（通常为0）
-SIMULATION_MODE = False       # 改为 False 启用真实硬件
+SERIAL_PORT     = '/dev/cu.wchusbserial10'
+SERIAL_BAUD     = 115200
+SIMULATION_MODE = False
 ```
 
-### 步骤三：启动系统
+### 步骤三：安装依赖并启动
 
 ```bash
+pip install -r requirements.txt
 python run.py
 ```
 
-访问：**http://127.0.0.1:5000**
+访问：**http://127.0.0.1:5001**
 
-### 步骤四：测试盖章
+### 步骤四：调整盖章深度
 
-用任意带文字的纸张测试，建议先用打印好的表单，调整 `arduino/stamp_controller.ino` 中的 `STAMP_DOWN` 角度（默认85°）直到印章力度合适：
+如果盖章位置不准，编辑 `hardware/stamp.py`：
 
-```cpp
-const int STAMP_DOWN = 85;   // 增大 = 压得更深；减小 = 力度更轻
-const int HOLD_TIME  = 900;  // 停留时间（ms），影响印迹清晰度
+```python
+_SHOULDER_DOWN = 2000   # 增大 = 下压更深（最大2500），减小 = 力度更轻
+_HOLD_TIME     = 0.9    # 停留时间（秒），影响印迹清晰度
 ```
 
 ---
@@ -297,23 +323,16 @@ const int HOLD_TIME  = 900;  // 停留时间（ms），影响印迹清晰度
 ```
 MEC202/
 │
-├── config.py                 # 全局配置（串口/摄像头/规则/路径）
-├── main.py                   # 主流程 DocumentProcessor
+├── config.py                 # 全局配置（串口/摄像头/路径）
+├── main.py                   # 主流程：检测纸张 → 盖章
 ├── run.py                    # 一键启动脚本
 ├── requirements.txt          # Python依赖
 │
 ├── vision/                   # 视觉模块
-│   ├── camera.py             # 摄像头拍照
-│   ├── ocr.py                # PaddleOCR识别 + 字段提取
-│   ├── qr_scanner.py         # 二维码/条码扫描
-│   └── page_counter.py       # 多页完整性检测
-│
-├── validator/                # 验证模块
-│   ├── rules.py              # 文档验证规则引擎（硬错误/软警告）
-│   └── id_checker.py         # ID号对库验证
+│   └── camera.py             # 摄像头拍照
 │
 ├── hardware/                 # 硬件控制
-│   └── stamp.py              # Arduino串口通信 + 盖章/锁定控制
+│   └── stamp.py              # WeArm 串口通信 + 盖章动作
 │
 ├── database/                 # 数据层
 │   ├── models.py             # 建表 + 初始化演示数据
