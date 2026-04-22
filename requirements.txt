@@ -1,0 +1,10 @@
+paddleocr==2.7.3
+paddlepaddle
+flask==3.0.3
+flask-session==0.8.0
+opencv-python
+pyserial==3.5
+pyzbar==0.1.9
+pillow==10.3.0
+werkzeug==3.0.3
+requests==2.32.3

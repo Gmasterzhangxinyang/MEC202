@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block title %}人工复审 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .review-item {
+    border: 1.5px solid #dee2e6; border-radius: 8px; padding: 1.2rem; margin-bottom: 1rem; transition: box-shadow .2s;
+  }
+  .review-item:hover { box-shadow: 0 4px 16px rgba(0,0,0,.1); }
+  .review-item.pending { border-left: 5px solid #ffc107; }
+  .review-item.approved { border-left: 5px solid #28a745; }
+  .review-item.rejected { border-left: 5px solid #dc3545; }
+  .review-meta { font-size: .82rem; color: #6c757d; margin-bottom: .5rem; }
+  .review-fields { font-size: .88rem; margin: .3rem 0; }
+  .review-ocr { font-size: .78rem; color: #495057; background: #f8f9fa; padding: .5rem .8rem; border-radius: 4px; margin: .5rem 0; max-height: 150px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+  .review-warnings { font-size: .85rem; color: #856404; background: #fff3cd; padding: .5rem .8rem; border-radius: 4px; margin: .5rem 0; }
+  .review-actions { display: flex; gap: .7rem; margin-top: .8rem; }
+  .img-preview { width: 120px; height: 90px; object-fit: cover; border-radius: 6px; cursor: pointer; border: 1px solid #dee2e6; }
+  .empty-state { text-align: center; padding: 3rem; color: #adb5bd; }
+  .tab-btns { display: flex; gap: .5rem; margin-bottom: 1.5rem; }
+  .tab-btn { padding: .45rem 1.2rem; border-radius: 20px; border: 1.5px solid #dee2e6; background: #fff; cursor: pointer; font-size: .88rem; transition: all .15s; }
+  .tab-btn.active { background: #1d3557; color: #fff; border-color: #1d3557; }
+  .img-row { display: flex; gap: .5rem; margin: .5rem 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>人工复审队列</h2>
+  <div class="tab-btns">
+    <button class="tab-btn active" onclick="showTab('pending', this)">
+      待处理 <span style="background:#ffc107;color:#000;border-radius:10px;padding:1px 8px;font-size:.75rem;">{{ pending|length }}</span>
+    </button>
+    <button class="tab-btn" onclick="showTab('all', this)">全部记录</button>
+  </div>
+
+  <!-- 待处理 -->
+  <div id="tab-pending">
+    {% if pending %}
+      {% for item in pending %}
+      <div class="review-item pending" id="item-{{ item[0] }}">
+        <div class="review-meta">
+          #{{ item[0] }} &nbsp;·&nbsp; {{ item[1][:19] }} &nbsp;·&nbsp;
+          操作员：{{ item[2] }} &nbsp;·&nbsp;
+          类型：{{ type_map.get(item[3], item[3] or '待分类') }}
+        </div>
+        <div class="review-fields"><b>识别字段：</b>{{ item[4] }}</div>
+        {% if item[5] %}
+        <div class="review-warnings"><b>待确认：</b>{{ item[5] }}</div>
+        {% endif %}
+        {% if item[12] %}
+        <div class="review-ocr"><b>OCR 原文：</b>{{ item[12] }}</div>
+        {% endif %}
+        {% if item[6] %}
+        <div class="img-row">
+          <img class="img-preview" src="/images/{{ item[6].replace('\\', '/').split('/')[-1] }}" onclick="openImg(this.src)">
+        </div>
+        {% endif %}
+        <div class="review-actions">
+          {% if item[3] == 'pending' and all_templates %}
+          <select id="classify-{{ item[0] }}" style="padding:.4rem .6rem;border:1.5px solid #dee2e6;border-radius:6px;font-size:.85rem;">
+            <option value="">-- 手动分类 --</option>
+            {% for t in all_templates %}
+            <option value="{{ t.code }}">{{ t.name }}</option>
+            {% endfor %}
+          </select>
+          {% endif %}
+          <button class="btn btn-success" onclick="resolve({{ item[0] }}, 'approved')">批准</button>
+          <button class="btn btn-danger"  onclick="resolve({{ item[0] }}, 'rejected')">拒绝</button>
+        </div>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="empty-state">暂无待处理的复审任务</div>
+    {% endif %}
+  </div>
+
+  <!-- 全部记录 -->
+  <div id="tab-all" style="display:none;">
+    {% for item in all_items %}
+    <div class="review-item {{ item[7] }}">
+      <div class="review-meta">
+        #{{ item[0] }} &nbsp;·&nbsp; {{ item[1][:19] }} &nbsp;·&nbsp;
+        操作员：{{ item[2] }} &nbsp;·&nbsp;
+        类型：{{ type_map.get(item[3], item[3] or '待分类') }}
+        &nbsp;·&nbsp; 状态：<b>{{ item[7] }}</b>
+        {% if item[8] %}&nbsp;·&nbsp; 复审员：{{ item[8] }}{% endif %}
+      </div>
+      <div class="review-fields">{{ item[4] }}</div>
+      {% if item[5] %}
+      <div class="review-warnings">{{ item[5] }}</div>
+      {% endif %}
+      {% if item[12] %}
+      <div class="review-ocr">{{ item[12] }}</div>
+      {% endif %}
+      {% if item[6] %}
+      <div class="img-row">
+        <img class="img-preview" src="/images/{{ item[6].replace('\\', '/').split('/')[-1] }}" onclick="openImg(this.src)">
+      </div>
+      {% endif %}
+    </div>
+    {% else %}
+    <div class="empty-state">暂无记录</div>
+    {% endfor %}
+  </div>
+</div>
+
+<div id="imgModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;" onclick="this.style.display='none'">
+  <img id="modalImg" style="max-width:90vw;max-height:90vh;border-radius:8px;">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showTab(name, btn) {
+  document.getElementById('tab-pending').style.display = name === 'pending' ? '' : 'none';
+  document.getElementById('tab-all').style.display    = name === 'all'     ? '' : 'none';
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+async function resolve(id, decision) {
+  const label = decision === 'approved' ? '批准' : '拒绝';
+  if (!confirm(`确认「${label}」这份文件？`)) return;
+  const reclassifyEl = document.getElementById(`classify-${id}`);
+  const reclassify = reclassifyEl ? reclassifyEl.value : '';
+  const resp = await fetch(`/review/${id}/resolve`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ decision, reclassify })
+  });
+  const data = await resp.json();
+  if (data.status === 'ok') {
+    const el = document.getElementById(`item-${id}`);
+    if (el) {
+      el.classList.remove('pending');
+      el.classList.add(decision);
+      el.querySelector('.review-actions').innerHTML =
+        `<span style="color:#6c757d;font-size:.85rem;">已${label}</span>`;
+    }
+  } else {
+    alert('操作失败：' + (data.error || '未知错误'));
+  }
+}
+function openImg(src) {
+  document.getElementById('modalImg').src = src;
+  document.getElementById('imgModal').style.display = 'flex';
+}
+</script>
+{% endblock %}

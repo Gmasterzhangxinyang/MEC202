@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block title %}审计日志 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .filter-bar { display:flex; gap:.8rem; margin-bottom:1rem; flex-wrap:wrap; align-items:center; }
+  .filter-bar input, .filter-bar select {
+    padding:.42rem .75rem; border:1.5px solid #dee2e6;
+    border-radius:6px; font-size:.85rem; outline:none;
+  }
+  .filter-bar input:focus,.filter-bar select:focus { border-color:#457b9d; }
+  .img-thumb {
+    width:52px; height:52px; object-fit:cover; border-radius:5px;
+    cursor:pointer; border:1px solid #dee2e6; transition:transform .2s;
+    vertical-align:middle;
+  }
+  .img-thumb:hover { transform:scale(1.12); }
+  .overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,.75);
+    z-index:999; align-items:center; justify-content:center; flex-direction:column; gap:1rem;
+  }
+  .overlay img { max-width:88vw; max-height:82vh; border-radius:10px; box-shadow:0 8px 40px rgba(0,0,0,.6); }
+  .overlay .close-btn { color:#fff; font-size:.9rem; cursor:pointer; background:rgba(255,255,255,.15); padding:.4rem 1.2rem; border-radius:20px; }
+  .doc-type-label { font-size:.78rem; background:#e9ecef; border-radius:4px; padding:.15rem .5rem; color:#495057; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>审计日志（最近50条）</h2>
+  <div class="filter-bar">
+    <input type="text" id="srch" placeholder="搜索操作员 / 字段…" oninput="doFilter()">
+    <select id="fResult" onchange="doFilter()">
+      <option value="">全部结果</option>
+      <option value="通过">通过</option>
+      <option value="拒绝">拒绝</option>
+      <option value="待复审">待复审</option>
+    </select>
+    <span id="countLabel" style="font-size:.82rem;color:#6c757d;margin-left:auto;"></span>
+  </div>
+  <div style="overflow-x:auto;">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th>#</th><th>时间</th><th>操作员</th><th>类型</th>
+          <th>识别字段</th><th>结果</th><th>盖章前</th><th>盖章后</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td>{{ r[0] }}</td>
+          <td style="white-space:nowrap;font-size:.8rem;">{{ r[1] }}</td>
+          <td>{{ r[2] }}</td>
+          <td>
+            <span class="doc-type-label">
+              {{ type_map.get(r[3], r[3] or '通用文件') }}
+            </span>
+          </td>
+          <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem;" title="{{ r[4] }}">
+            {{ r[4] }}
+          </td>
+          <td>
+            {% if r[5]=='APPROVED' %}
+              <span class="badge badge-success">✓ 通过</span>
+            {% elif r[5]=='REJECTED' %}
+              <span class="badge badge-danger">✗ 拒绝</span>
+            {% else %}
+              <span class="badge badge-warning">⏳ 待复审</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if r[7] %}
+              <img class="img-thumb" src="/images/{{ r[7].split('/')[-1] }}" onclick="showImg(this.src,'盖章前')" title="盖章前">
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if r[8] and r[8] != r[7] %}
+              <img class="img-thumb" src="/images/{{ r[8].split('/')[-1] }}" onclick="showImg(this.src,'盖章后')" title="盖章后">
+            {% elif r[5]=='APPROVED' and r[7] %}
+              <img class="img-thumb" src="/images/{{ r[7].split('/')[-1] }}" onclick="showImg(this.src,'盖章后')" title="盖章后">
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" style="text-align:center;padding:3rem;color:#adb5bd;">暂无记录</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<!-- 图片预览 -->
+<div class="overlay" id="imgOverlay" onclick="this.style.display='none'">
+  <img id="overlayImg">
+  <div class="close-btn">点击任意处关闭</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function showImg(src, label) {
+  document.getElementById('overlayImg').src = src;
+  document.getElementById('imgOverlay').style.display = 'flex';
+}
+
+function doFilter() {
+  const q = document.getElementById('srch').value.toLowerCase();
+  const f = document.getElementById('fResult').value;
+  let vis = 0;
+  document.querySelectorAll('#tbl tbody tr').forEach(tr => {
+    const t = tr.innerText.toLowerCase();
+    const ok = (!q || t.includes(q)) && (!f || t.includes(f));
+    tr.style.display = ok ? '' : 'none';
+    if (ok) vis++;
+  });
+  document.getElementById('countLabel').textContent = `显示 ${vis} 条`;
+}
+
+// 初始化计数
+doFilter();
+</script>
+{% endblock %}

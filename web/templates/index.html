@@ -1,0 +1,302 @@
+{% extends "base.html" %}
+{% block title %}操作台 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .stamp-panel {
+    text-align: center;
+    padding: 2rem 1rem;
+  }
+
+  /* 摄像头预览 */
+  .preview-wrap {
+    position: relative;
+    display: inline-block;
+    margin-bottom: 1.2rem;
+    border-radius: 10px;
+    overflow: hidden;
+    box-shadow: 0 4px 16px rgba(0,0,0,.2);
+  }
+  .preview-wrap img {
+    display: block;
+    width: 480px;
+    max-width: 100%;
+    height: auto;
+  }
+  .camera-select-wrap {
+    text-align: left;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: .5rem;
+    margin-bottom: .8rem;
+    font-size: .85rem;
+    color: #6c757d;
+  }
+  .camera-select-wrap select {
+    padding: .3rem .6rem;
+    border-radius: 6px;
+    border: 1px solid #ced4da;
+    font-size: .85rem;
+  }
+  .paper-badge {
+    position: absolute;
+    top: 10px; left: 10px;
+    padding: .3rem .8rem;
+    border-radius: 20px;
+    font-size: .82rem;
+    font-weight: 700;
+    color: #fff;
+    background: #dc3545;
+    transition: background .3s;
+    pointer-events: none;
+  }
+  .paper-badge.detected { background: #28a745; }
+
+  .stamp-btn {
+    width: 160px; height: 160px;
+    border-radius: 50%;
+    background: linear-gradient(145deg, #457b9d, #1d3557);
+    border: none;
+    color: #fff;
+    font-size: 1.1rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 6px 20px rgba(29,53,87,.4);
+    transition: transform .15s, box-shadow .15s;
+    line-height: 1.4;
+  }
+  .stamp-btn:hover:not(:disabled) { transform: scale(1.05); box-shadow: 0 10px 28px rgba(29,53,87,.5); }
+  .stamp-btn:active:not(:disabled) { transform: scale(.97); }
+  .stamp-btn:disabled { background: #adb5bd; cursor: not-allowed; box-shadow: none; }
+
+  .status-box {
+    margin-top: 1.5rem;
+    min-height: 70px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .result-card {
+    border-radius: 10px;
+    padding: 1.2rem 2rem;
+    max-width: 480px;
+    width: 100%;
+    text-align: left;
+    animation: fadeIn .3s ease;
+  }
+  @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:none; } }
+  .result-card.approved { background: #d4edda; border-left: 5px solid #28a745; }
+  .result-card.rejected { background: #f8d7da; border-left: 5px solid #dc3545; }
+  .result-card.pending { background: #fff3cd; border-left: 5px solid #ffc107; }
+  .result-card.error    { background: #f8d7da; border-left: 5px solid #6c757d; }
+  .result-card h3 { font-size: 1rem; margin-bottom: .5rem; }
+  .result-card ul { padding-left: 1.2rem; font-size: .88rem; margin-top: .4rem; }
+
+  .spinner {
+    display: inline-block;
+    width: 36px; height: 36px;
+    border: 4px solid #dee2e6;
+    border-top-color: #457b9d;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* 待盖章通知横幅 */
+  .pending-banner {
+    display: none;
+    background: #fff3cd;
+    border: 1px solid #ffc107;
+    border-radius: 8px;
+    padding: 1rem 1.2rem;
+    margin-bottom: 1.2rem;
+    text-align: left;
+  }
+  .pending-banner h3 { font-size: .95rem; color: #856404; margin-bottom: .6rem; }
+  .pending-list { list-style: none; padding: 0; }
+  .pending-list li {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: .5rem 0;
+    border-bottom: 1px solid #ffeeba;
+    font-size: .85rem;
+  }
+  .pending-list li:last-child { border-bottom: none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card stamp-panel">
+
+  <!-- 待盖章通知 -->
+  <div class="pending-banner" id="pendingBanner">
+    <h3>有复审通过的文件待盖章</h3>
+    <p style="font-size:.82rem;color:#856404;margin-bottom:.6rem;">
+      请将原文件放置在底板上，然后点击对应项目的"验证并盖章"按钮。
+    </p>
+    <ul class="pending-list" id="pendingList"></ul>
+  </div>
+
+  <!-- 摄像头实时预览 -->
+  <div class="camera-select-wrap">
+    <span>摄像头：</span>
+    <select id="cameraSelect"></select>
+  </div>
+  <div class="preview-wrap">
+    <img src="/video_feed" alt="摄像头预览">
+    <div class="paper-badge" id="paperBadge">未检测到纸张</div>
+  </div>
+
+  <br>
+  <button class="stamp-btn" id="stampBtn" onclick="triggerStamp()">
+    扫描<br>&amp;<br>盖章
+  </button>
+
+  <div class="status-box" id="statusBox">
+    <span style="color:#adb5bd;font-size:.9rem;">将文件放入摄像头视野后点击按钮</span>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// 加载摄像头列表
+async function loadCameras() {
+  try {
+    const r = await fetch('/api/cameras');
+    const d = await r.json();
+    const sel = document.getElementById('cameraSelect');
+    sel.innerHTML = '';
+    d.cameras.forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c.index;
+      opt.textContent = `Camera ${c.index} (${c.resolution})`;
+      if (c.index === d.current) opt.selected = true;
+      sel.appendChild(opt);
+    });
+  } catch(e) {}
+}
+loadCameras();
+
+document.getElementById('cameraSelect').addEventListener('change', async function() {
+  try {
+    await fetch('/api/camera/select', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({index: parseInt(this.value)})
+    });
+    document.querySelector('.preview-wrap img').src = '/video_feed?' + Date.now();
+  } catch(e) {}
+});
+
+// 每秒轮询纸张检测
+async function pollPaper() {
+  try {
+    const r = await fetch('/paper_status');
+    const d = await r.json();
+    const badge = document.getElementById('paperBadge');
+    if (d.has_paper) {
+      badge.textContent = '已检测到纸张';
+      badge.classList.add('detected');
+    } else {
+      badge.textContent = '未检测到纸张';
+      badge.classList.remove('detected');
+    }
+  } catch(e) {}
+}
+setInterval(pollPaper, 1000);
+pollPaper();
+
+// 检查待盖章的复审任务
+async function checkPendingStamps() {
+  try {
+    const r = await fetch('/api/review/pending_stamps');
+    const d = await r.json();
+    const banner = document.getElementById('pendingBanner');
+    const list = document.getElementById('pendingList');
+    if (d.items && d.items.length > 0) {
+      banner.style.display = 'block';
+      list.innerHTML = d.items.map(item => `
+        <li>
+          <span>#${item.id} · ${item.doc_type_name} · ${item.operator_id} · ${item.timestamp}</span>
+          <button class="btn btn-success" style="padding:.3rem .8rem;font-size:.8rem;"
+            onclick="triggerReviewStamp(${item.id}, this)">验证并盖章</button>
+        </li>
+      `).join('');
+    } else {
+      banner.style.display = 'none';
+    }
+  } catch(e) {}
+}
+checkPendingStamps();
+
+async function triggerReviewStamp(reviewId, btn) {
+  btn.disabled = true;
+  btn.textContent = '处理中...';
+  const box = document.getElementById('statusBox');
+  box.innerHTML = '<div class="spinner"></div>';
+
+  try {
+    const resp = await fetch(`/review/stamp/${reviewId}`, { method: 'POST' });
+    const data = await resp.json();
+    renderResult(data, box);
+    if (data.status === 'approved') {
+      btn.textContent = '已盖章';
+      btn.disabled = true;
+      setTimeout(checkPendingStamps, 2000);
+    } else {
+      btn.textContent = '验证并盖章';
+      btn.disabled = false;
+    }
+  } catch(e) {
+    box.innerHTML = `<div class="result-card error"><h3>系统错误</h3><ul><li>${e.message}</li></ul></div>`;
+    btn.textContent = '验证并盖章';
+    btn.disabled = false;
+  }
+}
+
+async function triggerStamp() {
+  const btn = document.getElementById('stampBtn');
+  const box = document.getElementById('statusBox');
+
+  btn.disabled = true;
+  box.innerHTML = '<div class="spinner"></div>';
+
+  try {
+    const resp = await fetch('/stamp', { method: 'POST' });
+    const data = await resp.json();
+    renderResult(data, box);
+    if (data.status === 'approved' || data.status === 'pending_review') {
+      setTimeout(checkPendingStamps, 2000);
+    }
+  } catch(e) {
+    box.innerHTML = `<div class="result-card error"><h3>系统错误</h3><ul><li>${e.message}</li></ul></div>`;
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+function renderResult(data, box) {
+  const { status, errors = [], warnings = [], message } = data;
+  let cls, title, msgs;
+
+  if (status === 'approved') {
+    cls = 'approved'; title = '盖章完成'; msgs = [];
+  } else if (status === 'rejected') {
+    cls = 'rejected'; title = '未盖章'; msgs = errors;
+  } else if (status === 'pending_review') {
+    cls = 'pending'; title = '已推入复审队列'; msgs = warnings;
+  } else {
+    cls = 'error'; title = '系统错误'; msgs = [message || '未知错误'];
+  }
+
+  const errHtml = msgs.length
+    ? '<ul>' + msgs.map(m => `<li>${m}</li>`).join('') + '</ul>'
+    : '';
+
+  box.innerHTML = `<div class="result-card ${cls}"><h3>${title}</h3>${errHtml}</div>`;
+}
+</script>
+{% endblock %}

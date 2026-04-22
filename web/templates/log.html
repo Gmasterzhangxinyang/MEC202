@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}审计日志 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .result-approved { color: #155724; font-weight: 700; }
+  .result-rejected { color: #721c24; font-weight: 700; }
+  .result-pending  { color: #856404; font-weight: 700; }
+  .img-thumb {
+    width: 48px; height: 48px;
+    object-fit: cover;
+    border-radius: 4px;
+    cursor: pointer;
+    border: 1px solid #dee2e6;
+    transition: transform .2s;
+  }
+  .img-thumb:hover { transform: scale(1.1); }
+  .filter-bar { display: flex; gap: 1rem; align-items: center; margin-bottom: 1rem; flex-wrap: wrap; }
+  .filter-bar input, .filter-bar select {
+    padding: .45rem .75rem;
+    border: 1.5px solid #dee2e6;
+    border-radius: 6px;
+    font-size: .88rem;
+    outline: none;
+  }
+  .filter-bar input:focus, .filter-bar select:focus { border-color: #457b9d; }
+  .ocr-text { font-size: .78rem; color: #495057; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; background: #f8f9fa; padding: 2px 6px; border-radius: 3px; }
+  .errors-text { font-size: .78rem; color: #dc3545; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  td { vertical-align: middle; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>审计日志（最近50条）</h2>
+  <div class="filter-bar">
+    <input type="text" id="searchInput" placeholder="搜索操作员/字段/OCR..." oninput="filterTable()">
+    <select id="resultFilter" onchange="filterTable()">
+      <option value="">全部结果</option>
+      <option value="APPROVED">通过</option>
+      <option value="REJECTED">拒绝</option>
+      <option value="PENDING_REVIEW">待复审</option>
+    </select>
+  </div>
+  <div style="overflow-x:auto;">
+    <table id="logTable">
+      <thead>
+        <tr>
+          <th>#</th><th>时间</th><th>操作员</th><th>类型</th>
+          <th>识别字段</th><th>OCR原文</th><th>结果</th><th>错误</th>
+          <th>原图</th><th>盖章图</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for row in rows %}
+        <tr data-result="{{ row[6] }}">
+          <td>{{ row[0] }}</td>
+          <td style="white-space:nowrap;font-size:.82rem;">{{ row[1][:19] }}</td>
+          <td>{{ row[2] }}</td>
+          <td>{{ type_map.get(row[3], row[3] or '-') }}</td>
+          <td style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="{{ row[5] }}">{{ row[5] }}</td>
+          <td class="ocr-text" title="{{ row[11] or '' }}">{{ row[11] or '-' }}</td>
+          <td>
+            {% if row[6] == 'APPROVED' %}<span class="result-approved">通过</span>
+            {% elif row[6] == 'REJECTED' %}<span class="result-rejected">拒绝</span>
+            {% else %}<span class="result-pending">待复审</span>{% endif %}
+          </td>
+          <td class="errors-text" title="{{ row[7] or '' }}">{{ row[7] or '-' }}</td>
+          <td>
+            {% if row[8] %}
+            <img class="img-thumb" src="/images/{{ row[8].replace('\\', '/').split('/')[-1] }}" onclick="openImg(this.src)">
+            {% else %}—{% endif %}
+          </td>
+          <td>
+            {% if row[9] %}
+            <img class="img-thumb" src="/images/{{ row[9].replace('\\', '/').split('/')[-1] }}" onclick="openImg(this.src)">
+            {% else %}—{% endif %}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="10" style="text-align:center;color:#adb5bd;padding:2rem;">暂无记录</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<div id="imgModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;" onclick="this.style.display='none'">
+  <img id="modalImg" style="max-width:90vw;max-height:90vh;border-radius:8px;box-shadow:0 8px 32px rgba(0,0,0,.5);">
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function openImg(src) {
+  document.getElementById('modalImg').src = src;
+  document.getElementById('imgModal').style.display = 'flex';
+}
+function filterTable() {
+  const search = document.getElementById('searchInput').value.toLowerCase();
+  const result = document.getElementById('resultFilter').value;
+  document.querySelectorAll('#logTable tbody tr').forEach(tr => {
+    const text = tr.innerText.toLowerCase();
+    const matchSearch = !search || text.includes(search);
+    const trResult = tr.dataset.result || '';
+    const matchResult = !result || trResult === result;
+    tr.style.display = matchSearch && matchResult ? '' : 'none';
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>登录 · 文档盖章系统</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif;
+      background: linear-gradient(135deg, #1d3557 0%, #457b9d 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .login-box {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 8px 32px rgba(0,0,0,.25);
+      padding: 2.5rem 2.2rem;
+      width: 360px;
+    }
+    .login-box h1 {
+      font-size: 1.4rem;
+      color: #1d3557;
+      margin-bottom: .3rem;
+      text-align: center;
+    }
+    .login-box p.sub {
+      color: #6c757d;
+      font-size: .85rem;
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+    .form-group { margin-bottom: 1.1rem; }
+    label { display: block; font-size: .85rem; color: #495057; margin-bottom: .35rem; }
+    input[type=text], input[type=password] {
+      width: 100%;
+      padding: .6rem .85rem;
+      border: 1.5px solid #dee2e6;
+      border-radius: 6px;
+      font-size: .95rem;
+      outline: none;
+      transition: border-color .2s;
+    }
+    input:focus { border-color: #457b9d; }
+    .btn-login {
+      width: 100%;
+      padding: .72rem;
+      background: #1d3557;
+      color: #fff;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: .5rem;
+      transition: background .2s;
+    }
+    .btn-login:hover { background: #457b9d; }
+    .error {
+      background: #f8d7da;
+      color: #721c24;
+      border-radius: 6px;
+      padding: .6rem .9rem;
+      font-size: .88rem;
+      margin-bottom: 1rem;
+    }
+    .demo-hint {
+      margin-top: 1.2rem;
+      font-size: .78rem;
+      color: #adb5bd;
+      text-align: center;
+      line-height: 1.6;
+    }
+  </style>
+</head>
+<body>
+<div class="login-box">
+  <h1>文档盖章机器人</h1>
+  <p class="sub">请使用工号/学号登录</p>
+  {% if error %}
+  <div class="error">{{ error }}</div>
+  {% endif %}
+  <form method="POST">
+    <div class="form-group">
+      <label>用户名</label>
+      <input type="text" name="username" placeholder="输入用户名" autofocus required>
+    </div>
+    <div class="form-group">
+      <label>密码</label>
+      <input type="password" name="password" placeholder="输入密码" required>
+    </div>
+    <button type="submit" class="btn-login">登 录</button>
+  </form>
+  <div class="demo-hint">
+    演示账号：admin / admin123<br>
+    操作员：operator1 / op123<br>
+    复审员：reviewer1 / reviewer123
+  </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% block title %}统计面板 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .stat-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.2rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08);
+    text-align: center;
+  }
+  .stat-card .number {
+    font-size: 2rem;
+    font-weight: 800;
+    line-height: 1.1;
+  }
+  .stat-card .label {
+    font-size: .82rem;
+    color: #6c757d;
+    margin-top: .3rem;
+  }
+  .stat-total .number { color: #1d3557; }
+  .stat-approved .number { color: #2a9d8f; }
+  .stat-rejected .number { color: #e63946; }
+  .stat-pending .number { color: #ffc107; }
+  .charts-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+  .chart-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  }
+  .chart-card h3 { font-size: 1rem; margin-bottom: 1rem; color: #1d3557; }
+  .chart-card canvas { max-height: 280px; }
+  .trend-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08);
+    margin-bottom: 1.5rem;
+  }
+  .trend-card h3 { font-size: 1rem; margin-bottom: .8rem; color: #1d3557; }
+  .trend-btns { display: flex; gap: .5rem; margin-bottom: 1rem; }
+  .trend-btn {
+    padding: .3rem .8rem; border-radius: 4px; border: 1px solid #dee2e6;
+    background: #fff; cursor: pointer; font-size: .82rem; transition: all .15s;
+  }
+  .trend-btn.active { background: #1d3557; color: #fff; border-color: #1d3557; }
+  .recent-card {
+    background: #fff;
+    border-radius: 10px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 12px rgba(0,0,0,.08);
+  }
+  .recent-card h3 { font-size: 1rem; margin-bottom: .8rem; color: #1d3557; }
+  .rate-text { font-size: .88rem; color: #6c757d; }
+  @media(max-width: 700px) {
+    .stats-grid { grid-template-columns: repeat(2, 1fr); }
+    .charts-row { grid-template-columns: 1fr; }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- 汇总卡片 -->
+<div class="stats-grid">
+  <div class="stat-card stat-total">
+    <div class="number" id="statTotal">-</div>
+    <div class="label">总处理量</div>
+  </div>
+  <div class="stat-card stat-approved">
+    <div class="number" id="statApproved">-</div>
+    <div class="label">通过 (<span id="rateApproved">-</span>)</div>
+  </div>
+  <div class="stat-card stat-rejected">
+    <div class="number" id="statRejected">-</div>
+    <div class="label">拒绝 (<span id="rateRejected">-</span>)</div>
+  </div>
+  <div class="stat-card stat-pending">
+    <div class="number" id="statPending">-</div>
+    <div class="label">待复审</div>
+  </div>
+</div>
+
+<!-- 饼图 -->
+<div class="charts-row">
+  <div class="chart-card">
+    <h3>文件类型分布</h3>
+    <canvas id="typeChart"></canvas>
+  </div>
+  <div class="chart-card">
+    <h3>审批结果分布</h3>
+    <canvas id="resultChart"></canvas>
+  </div>
+</div>
+
+<!-- 趋势图 -->
+<div class="trend-card">
+  <h3>处理趋势</h3>
+  <div class="trend-btns">
+    <button class="trend-btn active" onclick="setTrendDays(7, this)">近7天</button>
+    <button class="trend-btn" onclick="setTrendDays(30, this)">近30天</button>
+  </div>
+  <canvas id="trendChart"></canvas>
+</div>
+
+<!-- 最近记录 -->
+<div class="recent-card">
+  <h3>最近处理</h3>
+  <table>
+    <thead>
+      <tr><th>#</th><th>时间</th><th>操作员</th><th>类型</th><th>结果</th></tr>
+    </thead>
+    <tbody id="recentBody">
+      <tr><td colspan="5" style="text-align:center;color:#adb5bd;">加载中...</td></tr>
+    </tbody>
+  </table>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const COLORS = ['#1d3557','#457b9d','#2a9d8f','#e63946','#a8dadc','#f4a261','#264653','#e9c46a'];
+let trendChart = null;
+let allTrendData = [];
+
+async function loadData() {
+  const resp = await fetch('/stats/data');
+  const data = await resp.json();
+
+  // 汇总数字
+  document.getElementById('statTotal').textContent = data.total;
+  document.getElementById('statApproved').textContent = data.approved;
+  document.getElementById('statRejected').textContent = data.rejected;
+  document.getElementById('statPending').textContent = data.pending_queue;
+
+  const rateA = data.total ? ((data.approved / data.total) * 100).toFixed(1) + '%' : '0%';
+  const rateR = data.total ? ((data.rejected / data.total) * 100).toFixed(1) + '%' : '0%';
+  document.getElementById('rateApproved').textContent = rateA;
+  document.getElementById('rateRejected').textContent = rateR;
+
+  // 文件类型饼图
+  new Chart(document.getElementById('typeChart'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(data.type_distribution),
+      datasets: [{
+        data: Object.values(data.type_distribution),
+        backgroundColor: COLORS.slice(0, Object.keys(data.type_distribution).length),
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } }
+      }
+    }
+  });
+
+  // 审批结果饼图
+  new Chart(document.getElementById('resultChart'), {
+    type: 'doughnut',
+    data: {
+      labels: Object.keys(data.result_distribution),
+      datasets: [{
+        data: Object.values(data.result_distribution),
+        backgroundColor: ['#2a9d8f', '#e63946', '#ffc107'],
+      }]
+    },
+    options: {
+      responsive: true,
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 }, padding: 12 } }
+      }
+    }
+  });
+
+  // 趋势数据
+  allTrendData = data.daily_trend;
+  renderTrend(7);
+
+  // 最近记录
+  const tbody = document.getElementById('recentBody');
+  if (data.recent.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#adb5bd;">暂无记录</td></tr>';
+    return;
+  }
+  tbody.innerHTML = data.recent.map(r => {
+    const resultLabel = r[4] === 'APPROVED' ? '<span style="color:#155724;">通过</span>'
+                     : r[4] === 'REJECTED' ? '<span style="color:#721c24;">拒绝</span>'
+                     : '<span style="color:#856404;">待复审</span>';
+    return `<tr><td>${r[0]}</td><td style="white-space:nowrap;">${r[1]}</td><td>${r[2]}</td><td>${r[3]}</td><td>${resultLabel}</td></tr>`;
+  }).join('');
+}
+
+function renderTrend(days) {
+  const now = new Date();
+  const cutoff = new Date(now);
+  cutoff.setDate(cutoff.getDate() - days);
+  const cutoffStr = cutoff.toISOString().slice(0, 10);
+
+  const filtered = allTrendData.filter(r => r[0] >= cutoffStr);
+
+  // 生成日期标签
+  const dateLabels = [];
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(now);
+    d.setDate(d.getDate() - i);
+    dateLabels.push(d.toISOString().slice(0, 10));
+  }
+
+  // 按日期和结果聚合
+  const approved = {}, rejected = {}, pending = {};
+  dateLabels.forEach(d => { approved[d] = 0; rejected[d] = 0; pending[d] = 0; });
+  filtered.forEach(([day, result, count]) => {
+    if (result === '通过') approved[day] = (approved[day] || 0) + count;
+    else if (result === '拒绝') rejected[day] = (rejected[day] || 0) + count;
+    else pending[day] = (pending[day] || 0) + count;
+  });
+
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(document.getElementById('trendChart'), {
+    type: 'line',
+    data: {
+      labels: dateLabels.map(d => d.slice(5)), // MM-DD
+      datasets: [
+        { label: '通过', data: dateLabels.map(d => approved[d]), borderColor: '#2a9d8f', backgroundColor: 'rgba(42,157,143,.1)', fill: true, tension: .3 },
+        { label: '拒绝', data: dateLabels.map(d => rejected[d]), borderColor: '#e63946', backgroundColor: 'rgba(230,57,70,.1)', fill: true, tension: .3 },
+        { label: '待复审', data: dateLabels.map(d => pending[d]), borderColor: '#ffc107', backgroundColor: 'rgba(255,193,7,.1)', fill: true, tension: .3 },
+      ]
+    },
+    options: {
+      responsive: true,
+      scales: {
+        y: { beginAtZero: true, ticks: { stepSize: 1 } }
+      },
+      plugins: {
+        legend: { position: 'bottom', labels: { font: { size: 12 } } }
+      }
+    }
+  });
+}
+
+function setTrendDays(days, btn) {
+  document.querySelectorAll('.trend-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTrend(days);
+}
+
+loadData();
+</script>
+{% endblock %}

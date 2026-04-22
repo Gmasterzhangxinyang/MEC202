@@ -1,0 +1,31 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# 数据库（运行时生成）
+*.db
+
+# 审计图片（运行时生成）
+audit_images/
+demo/demo_images/
+
+# 环境
+.env
+.venv
+venv/
+env/
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
+*.swp

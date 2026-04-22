@@ -1,0 +1,373 @@
+{% extends "base.html" %}
+{% block title %}机械臂标定 · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .cal-status {
+    text-align: center;
+    padding: .8rem;
+    border-radius: 8px;
+    margin-bottom: 1.5rem;
+    font-weight: 700;
+  }
+  .cal-status.incomplete { background: #fff3cd; color: #856404; }
+  .cal-status.complete { background: #d4edda; color: #155724; }
+
+  .corner-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+  .corner-card {
+    border: 2px solid #dee2e6;
+    border-radius: 10px;
+    padding: 1rem;
+    text-align: center;
+    transition: border-color .3s;
+  }
+  .corner-card.active { border-color: #457b9d; background: #f8f9fa; }
+  .corner-card.done { border-color: #2a9d8f; }
+  .corner-card h3 { font-size: .95rem; margin-bottom: .6rem; color: #1d3557; }
+  .corner-card .status-icon { font-size: 1.5rem; margin-bottom: .3rem; }
+
+  .servo-panel {
+    background: #f8f9fa;
+    border-radius: 10px;
+    padding: 1.2rem;
+    margin-bottom: 1rem;
+  }
+  .servo-panel h3 { font-size: 1rem; margin-bottom: .8rem; }
+  .servo-row {
+    display: flex;
+    align-items: center;
+    gap: .8rem;
+    margin-bottom: .6rem;
+  }
+  .servo-row label {
+    width: 50px;
+    font-size: .85rem;
+    font-weight: 600;
+    text-align: right;
+    color: #495057;
+  }
+  .servo-row input[type=range] {
+    flex: 1;
+    max-width: 300px;
+  }
+  .servo-row .pwm-val {
+    width: 50px;
+    font-size: .85rem;
+    text-align: center;
+    font-family: monospace;
+    color: #457b9d;
+    font-weight: 600;
+  }
+  .servo-row .servo-name {
+    width: 40px;
+    font-size: .8rem;
+    color: #6c757d;
+  }
+
+  .btn-row {
+    display: flex;
+    gap: .8rem;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+
+  .test-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: .6rem;
+    margin-top: .8rem;
+  }
+
+  #errorMsg {
+    color: #dc3545;
+    font-size: .85rem;
+    text-align: center;
+    min-height: 1.2em;
+    margin-top: .5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+  <h2>机械臂四角标定</h2>
+  <p style="color:#6c757d;font-size:.9rem;margin-bottom:1rem;">
+    将A4纸放置在底板上，拖动下方滑块实时控制机械臂移动到纸张四个角，分别保存。
+  </p>
+
+  <div id="calStatus" class="cal-status incomplete">标定状态加载中...</div>
+
+  <div class="corner-cards">
+    <div class="corner-card" id="card-top_left">
+      <div class="status-icon" id="icon-top_left">&#9744;</div>
+      <h3>Step 1: 左上角 (TL)</h3>
+      <button class="btn btn-success" onclick="saveCorner('top_left')">保存左上角</button>
+    </div>
+    <div class="corner-card" id="card-top_right">
+      <div class="status-icon" id="icon-top_right">&#9744;</div>
+      <h3>Step 2: 右上角 (TR)</h3>
+      <button class="btn btn-success" onclick="saveCorner('top_right')">保存右上角</button>
+    </div>
+    <div class="corner-card" id="card-bottom_left">
+      <div class="status-icon" id="icon-bottom_left">&#9744;</div>
+      <h3>Step 3: 左下角 (BL)</h3>
+      <button class="btn btn-success" onclick="saveCorner('bottom_left')">保存左下角</button>
+    </div>
+    <div class="corner-card" id="card-bottom_right">
+      <div class="status-icon" id="icon-bottom_right">&#9744;</div>
+      <h3>Step 4: 右下角</h3>
+      <button class="btn btn-success" onclick="saveCorner('bottom_right')">保存右下角</button>
+    </div>
+  </div>
+
+  <div class="servo-panel">
+    <h3>连接测试</h3>
+    <div class="btn-row">
+      <button class="btn btn-primary" id="btnPing" onclick="testPing()">测试机械臂连接</button>
+    </div>
+    <div id="pingResult" style="font-size:.85rem;text-align:center;margin-top:.5rem;min-height:1.4em;"></div>
+  </div>
+
+  <div class="servo-panel">
+    <h3>舵机控制 <span style="font-size:.8rem;color:#adb5bd;font-weight:400;">（拖动滑块实时控制机械臂）</span></h3>
+    <div id="servoSliders"></div>
+    <div id="errorMsg"></div>
+    <div class="btn-row">
+      <button class="btn btn-secondary" onclick="goHome()">回到中位</button>
+    </div>
+  </div>
+
+  <div class="servo-panel">
+    <h3>测试移动</h3>
+    <div class="test-grid">
+      <button class="btn btn-secondary" onclick="testMove('top_left')">移动到 TL</button>
+      <button class="btn btn-secondary" onclick="testMove('top_right')">移动到 TR</button>
+      <button class="btn btn-secondary" onclick="testMove('bottom_left')">移动到 BL</button>
+      <button class="btn btn-secondary" onclick="testMove('bottom_right')">移动到 BR</button>
+    </div>
+    <div class="btn-row" style="margin-top:1rem;">
+      <button class="btn btn-danger" onclick="resetCalibration()">清除所有标定</button>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const SERVO_NAMES = {0:'S0 底盘',1:'S1 大臂',2:'S2 小臂',3:'S3 手腕',4:'S4 夹爪',5:'S5 辅助'};
+const PWM_MIN = 500, PWM_MAX = 2500, PWM_MID = 1500;
+let currentPwms = {};
+let savedCorners = {};
+let pendingPwm = null;  // {sid, val} 待发送的值
+let moveInterval = null;
+const MOVE_INTERVAL = 300;  // 采样间隔(ms)
+
+(function initSliders() {
+  const container = document.getElementById('servoSliders');
+  for (let sid = 0; sid < 6; sid++) {
+    currentPwms[sid] = PWM_MID;
+    const row = document.createElement('div');
+    row.className = 'servo-row';
+    row.innerHTML = `
+      <label>${sid}</label>
+      <span class="servo-name">${SERVO_NAMES[sid].split(' ')[1]}</span>
+      <input type="range" id="slider-${sid}" min="${PWM_MIN}" max="${PWM_MAX}" value="${PWM_MID}" step="10"
+        oninput="onSliderInput(${sid}, this.value)"
+        onpointerup="onSliderRelease()">
+      <input type="number" id="num-${sid}" min="${PWM_MIN}" max="${PWM_MAX}" value="${PWM_MID}" step="10"
+        style="width:58px;text-align:center;font-size:.8rem;padding:2px;border:1px solid #ced4da;border-radius:4px;"
+        onchange="onNumInput(${sid}, this.value)">
+    `;
+    container.appendChild(row);
+  }
+})();
+
+function onSliderInput(sid, val) {
+  pendingPwm = {sid: sid, val: parseInt(val)};
+}
+
+function onNumInput(sid, val) {
+  val = Math.max(PWM_MIN, Math.min(PWM_MAX, parseInt(val) || PWM_MID));
+  document.getElementById(`num-${sid}`).value = val;
+  document.getElementById(`slider-${sid}`).value = val;
+  currentPwms[sid] = val;
+  console.log('[calibration] numInput S' + sid + ' -> ' + val);
+  sendMove(sid, val);
+}
+
+function onSliderRelease() {
+  if (pendingPwm && !moveInterval) {
+    sendMove(pendingPwm.sid, pendingPwm.val);
+    pendingPwm = null;
+  }
+  pendingPwm = null;
+}
+
+// 启动采样循环
+moveInterval = setInterval(() => {
+  if (pendingPwm) {
+    sendMove(pendingPwm.sid, pendingPwm.val);
+    pendingPwm = null;
+  }
+}, MOVE_INTERVAL);
+
+async function sendMove(sid, val) {
+  const t0 = performance.now();
+  try {
+    const resp = await fetch('/api/calibration/move_single', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({servo_id: sid, pwm: parseInt(val)})
+    });
+    const data = await resp.json();
+    const ms = (performance.now() - t0).toFixed(0);
+    if (data.error) {
+      console.error('[calibration] ERROR:', data.error);
+      document.getElementById('errorMsg').textContent = data.error;
+    } else {
+      console.log('[calibration] OK S' + sid + '=' + val + ' (' + ms + 'ms)');
+      document.getElementById('errorMsg').textContent = '';
+    }
+  } catch(e) {
+    console.error('[calibration] FETCH ERROR:', e);
+    document.getElementById('errorMsg').textContent = '通信失败: ' + e.message;
+  }
+}
+
+async function saveCorner(name) {
+  console.log('[calibration] saveCorner -> ' + name + ', pwms:', JSON.stringify(currentPwms));
+  try {
+    const resp = await fetch('/api/calibration/save_corner', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({corner: name, pwms: currentPwms})
+    });
+    const data = await resp.json();
+    console.log('[calibration] saveCorner result:', JSON.stringify(data));
+    if (data.status === 'ok') {
+      savedCorners = data.corners;
+      updateCornerStatus();
+      alert('已保存 ' + name + ' 位置');
+    }
+    if (data.error) alert('保存失败: ' + data.error);
+  } catch(e) { alert('保存失败: ' + e.message); }
+}
+
+async function testMove(corner) {
+  console.log('[calibration] testMove -> ' + corner);
+  try {
+    const resp = await fetch('/api/calibration/test_move', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({corner: corner})
+    });
+    const data = await resp.json();
+    console.log('[calibration] testMove result:', JSON.stringify(data));
+    if (data.error) {
+      alert(data.error);
+    } else {
+      // 同步滑块到目标位置的 PWM 值
+      const cal = savedCorners[corner];
+      if (cal) {
+        for (let [k, v] of Object.entries(cal)) {
+          const sid = parseInt(k);
+          currentPwms[sid] = v;
+          document.getElementById(`slider-${sid}`).value = v;
+          document.getElementById(`num-${sid}`).value = v;
+        }
+      }
+    }
+  } catch(e) {
+    console.error('[calibration] testMove ERROR:', e);
+    alert(e.message);
+  }
+}
+
+async function goHome() {
+  for (let sid = 0; sid < 6; sid++) {
+    currentPwms[sid] = PWM_MID;
+    document.getElementById(`slider-${sid}`).value = PWM_MID;
+    document.getElementById(`num-${sid}`).value = PWM_MID;
+  }
+  for (let sid = 0; sid < 6; sid++) {
+    await sendMove(sid, PWM_MID);
+  }
+}
+
+async function resetCalibration() {
+  if (!confirm('确定清除所有标定数据？')) return;
+  try {
+    await fetch('/api/calibration/reset', {method: 'POST'});
+    savedCorners = {};
+    updateCornerStatus();
+  } catch(e) { alert(e.message); }
+}
+
+function updateCornerStatus() {
+  const corners = ['top_left','top_right','bottom_left','bottom_right'];
+  let done = 0;
+  corners.forEach(name => {
+    const card = document.getElementById(`card-${name}`);
+    const icon = document.getElementById(`icon-${name}`);
+    if (savedCorners[name]) {
+      card.classList.add('done');
+      icon.innerHTML = '&#9989;';
+      done++;
+    } else {
+      card.classList.remove('done');
+      icon.innerHTML = '&#9744;';
+    }
+  });
+  const status = document.getElementById('calStatus');
+  if (done === 4) {
+    status.className = 'cal-status complete';
+    status.textContent = '标定完成！所有四个角已记录。';
+  } else {
+    status.className = 'cal-status incomplete';
+    status.textContent = `已标定 ${done}/4 个角`;
+  }
+}
+
+async function testPing() {
+  const btn = document.getElementById('btnPing');
+  const res = document.getElementById('pingResult');
+  btn.disabled = true;
+  btn.textContent = '测试中...';
+  res.textContent = '';
+  try {
+    console.log('[calibration] 发送 ping...');
+    const resp = await fetch('/api/calibration/ping', {method: 'POST'});
+    const data = await resp.json();
+    console.log('[calibration] ping 响应:', JSON.stringify(data));
+    if (data.status === 'ok' && data.connected) {
+      res.innerHTML = '<span style="color:#155724;">连接成功，机械臂已回中位</span>';
+    } else if (data.status === 'error') {
+      res.innerHTML = '<span style="color:#dc3545;">失败: ' + data.message + '</span>';
+    } else {
+      res.innerHTML = '<span style="color:#856404;">状态未知</span>';
+    }
+  } catch(e) {
+    console.error('[calibration] ping 异常:', e);
+    res.innerHTML = '<span style="color:#dc3545;">请求失败: ' + e.message + '</span>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '测试机械臂连接';
+  }
+}
+
+(async function loadCal() {
+  try {
+    const resp = await fetch('/api/calibration/load');
+    const data = await resp.json();
+    savedCorners = data.corners || {};
+    updateCornerStatus();
+  } catch(e) {}
+})();
+</script>
+{% endblock %}

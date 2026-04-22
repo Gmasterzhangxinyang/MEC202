@@ -1,0 +1,182 @@
+{% extends "base.html" %}
+{% block title %}{{ '编辑模板' if template else '新建模板' }} · 文档盖章系统{% endblock %}
+
+{% block head %}
+<style>
+  .form-group { margin-bottom: 1rem; }
+  .form-group label {
+    display: block;
+    font-size: .88rem;
+    font-weight: 600;
+    margin-bottom: .35rem;
+    color: #333;
+  }
+  .form-group input, .form-group textarea, .form-group select {
+    width: 100%;
+    padding: .55rem .75rem;
+    border: 1.5px solid #dee2e6;
+    border-radius: 6px;
+    font-size: .9rem;
+    outline: none;
+    font-family: inherit;
+  }
+  .form-group input:focus, .form-group textarea:focus { border-color: #457b9d; }
+  .form-group textarea { resize: vertical; min-height: 60px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  .section-title {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1d3557;
+    padding-bottom: .5rem;
+    border-bottom: 2px solid #e9ecef;
+    margin: 1.5rem 0 1rem;
+  }
+  .field-table { width: 100%; border-collapse: collapse; margin-bottom: 1rem; }
+  .field-table th {
+    background: #f8f9fa; padding: .5rem .4rem; text-align: left;
+    font-size: .78rem; font-weight: 600; border-bottom: 2px solid #dee2e6;
+  }
+  .field-table td { padding: .35rem .3rem; border-bottom: 1px solid #f0f0f0; }
+  .field-table input, .field-table select {
+    width: 100%; padding: .35rem .5rem; border: 1px solid #dee2e6;
+    border-radius: 4px; font-size: .82rem; outline: none;
+  }
+  .field-table input:focus { border-color: #457b9d; }
+  .btn-row { display: flex; gap: .7rem; margin-top: 1.5rem; }
+  .cat-required { background: #d4edda; color: #155724; }
+  .cat-optional { background: #cce5ff; color: #004085; }
+  .cat-forbidden { background: #f8d7da; color: #721c24; }
+  .help-text { font-size: .78rem; color: #6c757d; margin-top: .2rem; }
+  .example-section { margin-top: 1rem; }
+  .example-img {
+    max-width: 300px; max-height: 400px;
+    border-radius: 8px; border: 1px solid #dee2e6; margin-top: .5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<form method="POST" action="{{ url_for('admin_template_new') if not template else url_for('admin_template_edit', tid=template.id) }}">
+<div class="card">
+  <h2>{{ '编辑模板' if template else '新建模板' }}</h2>
+
+  <!-- 基本信息 -->
+  <div class="section-title">基本信息</div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>模板名称 *</label>
+      <input type="text" name="name" value="{{ template.name if template else '' }}" required
+             {% if template and template.is_system %}readonly style="background:#f8f9fa;"{% endif %}>
+    </div>
+    <div class="form-group">
+      <label>模板编码 *</label>
+      <input type="text" name="code" value="{{ template.code if template else '' }}" required
+             pattern="[a-zA-Z0-9_]+" title="仅允许英文字母、数字和下划线"
+             {% if template %}readonly style="background:#f8f9fa;"{% endif %}>
+      <div class="help-text">唯一标识，如 leave, expense。创建后不可修改。</div>
+    </div>
+  </div>
+  <div class="form-group">
+    <label>描述</label>
+    <textarea name="description" rows="2">{{ template.description if template else '' }}</textarea>
+  </div>
+
+  <!-- 分类规则 -->
+  <div class="section-title">自动分类规则</div>
+  <div class="form-row">
+    <div class="form-group">
+      <label>分类关键词</label>
+      <input type="text" name="keywords"
+             value="{{ template.keywords if template else '' }}"
+             placeholder="用英文逗号分隔，如：请假,事假,病假">
+      <div class="help-text">OCR 全文中出现这些关键词时会倾向归为此类型</div>
+    </div>
+    <div class="form-group">
+      <label>分类正则表达式</label>
+      <input type="text" name="regex"
+             value="{{ template.regex if template else '' }}"
+             placeholder="可选，如：请假">
+      <div class="help-text">匹配全文时为强分类信号</div>
+    </div>
+  </div>
+
+  <!-- 字段定义 -->
+  <div class="section-title">字段定义</div>
+  <div style="overflow-x:auto;">
+    <table class="field-table" id="fieldTable">
+      <thead>
+        <tr>
+          <th style="width:13%">字段名 *</th>
+          <th style="width:13%">显示标签</th>
+          <th style="width:10%">类别</th>
+          <th style="width:24%">OCR 提取正则</th>
+          <th style="width:24%">验证规则 (JSON)</th>
+          <th style="width:6%"></th>
+        </tr>
+      </thead>
+      <tbody id="fieldBody">
+        {% for f in (template.fields if template else []) %}
+        <tr>
+          <td><input type="text" name="field_name" value="{{ f.field_name }}" required></td>
+          <td><input type="text" name="field_label" value="{{ f.field_label }}"></td>
+          <td>
+            <select name="field_category">
+              <option value="required" {% if f.field_category == 'required' %}selected{% endif %}>必填</option>
+              <option value="optional" {% if f.field_category == 'optional' %}selected{% endif %}>选填</option>
+              <option value="forbidden" {% if f.field_category == 'forbidden' %}selected{% endif %}>非法</option>
+            </select>
+          </td>
+          <td><input type="text" name="ocr_pattern" value="{{ f.ocr_pattern or '' }}" placeholder="正则表达式"></td>
+          <td><input type="text" name="validation_rule" value="{{ f.validation_rule or '' }}" placeholder='{"regex":"..."}'></td>
+          <td><button type="button" class="btn btn-danger" style="padding:.2rem .4rem;font-size:.75rem;" onclick="this.closest('tr').remove()">-</button></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <button type="button" class="btn btn-secondary" style="font-size:.85rem;" onclick="addField()">+ 添加字段</button>
+
+  <!-- 示例图片 -->
+  {% if template %}
+  <div class="section-title">示例文档</div>
+  <div class="example-section">
+    <form method="POST" action="/admin/templates/{{ template.id }}/generate_example" style="display:inline;">
+      <button type="submit" class="btn btn-secondary" style="font-size:.85rem;">生成示例文档</button>
+    </form>
+    {% if template.example_image %}
+    <img class="example-img" src="/examples/{{ template.example_image.split('/')[-1] }}">
+    {% endif %}
+  </div>
+  {% endif %}
+</div>
+
+<div class="btn-row">
+  <button type="submit" class="btn btn-success">保存</button>
+  <a href="/admin/templates" class="btn btn-secondary">取消</a>
+</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function addField() {
+  const tbody = document.getElementById('fieldBody');
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" name="field_name" required></td>
+    <td><input type="text" name="field_label"></td>
+    <td>
+      <select name="field_category">
+        <option value="required">必填</option>
+        <option value="optional">选填</option>
+        <option value="forbidden">非法</option>
+      </select>
+    </td>
+    <td><input type="text" name="ocr_pattern" placeholder="正则表达式"></td>
+    <td><input type="text" name="validation_rule" placeholder='{"regex":"..."}'></td>
+    <td><button type="button" class="btn btn-danger" style="padding:.2rem .4rem;font-size:.75rem;" onclick="this.closest('tr').remove()">-</button></td>
+  `;
+  tbody.appendChild(tr);
+}
+</script>
+{% endblock %}
