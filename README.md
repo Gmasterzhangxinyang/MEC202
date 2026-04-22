@@ -244,6 +244,7 @@ pyzbar==0.1.9
 pillow==10.3.0
 werkzeug==3.0.3
 requests==2.32.3
+
 ```
 
 ---
