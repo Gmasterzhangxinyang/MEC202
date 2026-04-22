@@ -48,6 +48,13 @@ def log_action(
 
 
 def get_recent_logs(limit: int = 50) -> list:
+     """
+    获取最近的审计日志记录。
+    Args:
+        limit: 返回记录的最大数量，默认为 50。
+    Returns:
+        list: 包含日志记录的列表。
+    """
     conn = sqlite3.connect(DB_PATH)
     rows = conn.execute(
         'SELECT * FROM audit_log ORDER BY id DESC LIMIT ?', (limit,)
